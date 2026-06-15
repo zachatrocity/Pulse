@@ -2,9 +2,9 @@ node_modules/
 dist/
 dist-ts/
 coverage/
+data/
 .git/
 .env
 .env.local
 *.tsbuildinfo
 npm-debug.log*
-

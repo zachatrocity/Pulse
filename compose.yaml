@@ -14,6 +14,10 @@ services:
       PULSE_OAUTH_SCOPE: atproto repo:app.pulse.room repo:app.pulse.room.server repo:app.pulse.room.member repo:app.pulse.room.presence
       # Required for real HTTPS deployments:
       # PULSE_OAUTH_PRIVATE_KEY: '{"kty":"EC","kid":"...","crv":"P-256","x":"...","y":"...","d":"...","alg":"ES256"}'
+      PULSE_DATABASE_PATH: /data/pulse.sqlite
+      PULSE_ATPROTO_PDS_URL: https://bsky.social
+      PULSE_INDEXER_REPOS: ''
+      PULSE_INDEXER_JETSTREAM_URL: ''
     ports:
       - '8787:8787'
     volumes:

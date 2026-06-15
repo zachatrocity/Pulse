@@ -19,6 +19,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PULSE_HOST=0.0.0.0
 ENV PULSE_PORT=8787
+ENV PULSE_DATA_DIR=/data
+ENV PULSE_DATABASE_PATH=/data/pulse.sqlite
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/apps/api/package.json ./apps/api/package.json
@@ -26,7 +28,8 @@ COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/web/dist ./apps/web/dist
 COPY --from=build /app/packages/shared/package.json ./packages/shared/package.json
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+RUN mkdir -p /data && chown node:node /data
 USER node
+VOLUME ["/data"]
 EXPOSE 8787
 CMD ["node", "apps/api/dist/index.js"]
-
