@@ -8,6 +8,10 @@ export type RuntimeConfig = {
   sessionSecret: string;
   oauthPrivateKey?: string;
   oauthScope: string;
+  databasePath: string;
+  atprotoPdsUrl: string;
+  indexerRepos: string[];
+  indexerJetstreamUrl?: string;
 };
 
 const DEFAULT_OAUTH_SCOPE =
@@ -25,6 +29,17 @@ const parsePort = (value: string | undefined): number => {
   }
 
   return parsed;
+};
+
+const parseList = (value: string | undefined): string[] =>
+  value
+    ?.split(',')
+    .map((item) => item.trim())
+    .filter(Boolean) ?? [];
+
+const emptyToUndefined = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
 };
 
 const normalizeUrl = (value: string, name: string): string => {
@@ -97,6 +112,7 @@ const validatePrivateKey = (
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): RuntimeConfig => {
   const nodeEnv = env.NODE_ENV ?? 'development';
   const port = parsePort(env.PULSE_PORT);
+  const dataDir = env.PULSE_DATA_DIR ?? './data';
   const publicUrl = normalizeUrl(
     env.PULSE_PUBLIC_URL ?? `http://127.0.0.1:${port}`,
     'PULSE_PUBLIC_URL',
@@ -108,9 +124,16 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     publicUrl,
     webOrigin: normalizeUrl(env.PULSE_WEB_ORIGIN ?? 'http://localhost:5173', 'PULSE_WEB_ORIGIN'),
     nodeEnv,
-    dataDir: env.PULSE_DATA_DIR ?? './data',
+    dataDir,
     sessionSecret: validateSecret(env.PULSE_SESSION_SECRET, nodeEnv),
     oauthPrivateKey: validatePrivateKey(env.PULSE_OAUTH_PRIVATE_KEY, publicUrl, nodeEnv),
     oauthScope: validateScope(env.PULSE_OAUTH_SCOPE),
+    databasePath: env.PULSE_DATABASE_PATH ?? `${dataDir}/pulse.sqlite`,
+    atprotoPdsUrl: normalizeUrl(
+      env.PULSE_ATPROTO_PDS_URL ?? 'https://bsky.social',
+      'PULSE_ATPROTO_PDS_URL',
+    ),
+    indexerRepos: parseList(env.PULSE_INDEXER_REPOS),
+    indexerJetstreamUrl: emptyToUndefined(env.PULSE_INDEXER_JETSTREAM_URL),
   };
 };

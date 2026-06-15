@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
+import { RoomIndexStore } from './rooms/store.js';
 
 describe('api app', () => {
   it('returns health information', async () => {
@@ -80,5 +81,40 @@ describe('api app', () => {
         PULSE_SESSION_SECRET: 'too-short',
       }),
     ).toThrow('PULSE_SESSION_SECRET must be set to at least 32 characters in production');
+  });
+
+  it('returns searchable indexed rooms', async () => {
+    const roomStore = new RoomIndexStore();
+    roomStore.upsertRoom({
+      uri: 'at://did:plc:creator/app.pulse.room/room1',
+      cid: 'bafyroom',
+      repo: 'did:plc:creator',
+      rkey: 'room1',
+      record: {
+        name: 'Repair Cafe',
+        description: 'Weekly hardware debugging',
+        createdAt: '2026-06-15T00:00:00.000Z',
+        visibility: 'public',
+        joinMode: 'open',
+        server: {
+          serviceDid: 'did:plc:pulseserver',
+          baseUrl: 'https://pulse.example.com',
+          createdAt: '2026-06-15T00:00:00.000Z',
+        },
+      },
+    });
+    const app = createApp(loadConfig({}), { roomStore });
+
+    const response = await app.request('/api/rooms?q=hardware');
+
+    await expect(response.json()).resolves.toMatchObject({
+      rooms: [
+        {
+          name: 'Repair Cafe',
+          uri: 'at://did:plc:creator/app.pulse.room/room1',
+          serverBaseUrl: 'https://pulse.example.com',
+        },
+      ],
+    });
   });
 });
