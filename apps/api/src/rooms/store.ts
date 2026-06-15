@@ -103,6 +103,11 @@ export class RoomIndexStore {
     this.database.prepare('DELETE FROM indexed_rooms WHERE uri = ?').run(uri);
   }
 
+  getRoom(uri: AtUri): IndexedRoom | null {
+    const row = this.database.prepare('SELECT * FROM indexed_rooms WHERE uri = ?').get(uri);
+    return row ? mapRoomRow(row) : null;
+  }
+
   searchRooms(options: RoomSearchOptions = {}): IndexedRoom[] {
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
     const query = options.query?.trim();
