@@ -4,6 +4,8 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { RoomIndexStore } from './rooms/store.js';
 
+import type { AtprotoIdentityService } from './identity/service.js';
+
 describe('api app', () => {
   it('returns health information', async () => {
     const app = createApp(loadConfig({}));
@@ -55,6 +57,32 @@ describe('api app', () => {
     });
   });
 
+  it('resolves handles through the client-safe identity API', async () => {
+    const identityService = {
+      resolveHandle: async (handle: string) =>
+        handle === 'alice.example'
+          ? {
+              did: 'did:plc:alice',
+              handle,
+              displayName: 'Alice',
+              pdsEndpoint: 'https://pds.example.com',
+            }
+          : null,
+    } as unknown as AtprotoIdentityService;
+    const app = createApp(loadConfig({}), { identityService });
+
+    const response = await app.request('/api/identity/resolve?handle=alice.example');
+
+    await expect(response.json()).resolves.toEqual({
+      identity: {
+        did: 'did:plc:alice',
+        handle: 'alice.example',
+        displayName: 'Alice',
+        pdsEndpoint: 'https://pds.example.com',
+      },
+    });
+  });
+
   it('serves OAuth client metadata for local development', async () => {
     const app = createApp(loadConfig({ PULSE_PUBLIC_URL: 'http://127.0.0.1:8787' }));
 
@@ -103,16 +131,39 @@ describe('api app', () => {
         },
       },
     });
-    const app = createApp(loadConfig({}), { roomStore });
+    const identityService = {
+      getPrincipals: async () =>
+        new Map([
+          [
+            'did:plc:creator',
+            {
+              did: 'did:plc:creator',
+              handle: 'creator.example',
+              displayName: 'Creator',
+              pdsEndpoint: 'https://pds.example.com',
+            },
+          ],
+          ['did:plc:pulseserver', { did: 'did:plc:pulseserver' }],
+        ]),
+    } as unknown as AtprotoIdentityService;
+    const app = createApp(loadConfig({}), { roomStore, identityService });
 
     const response = await app.request('/api/rooms?q=hardware');
 
     await expect(response.json()).resolves.toMatchObject({
       rooms: [
         {
+          creator: {
+            did: 'did:plc:creator',
+            displayName: 'Creator',
+            handle: 'creator.example',
+          },
           name: 'Repair Cafe',
+          server: {
+            did: 'did:plc:pulseserver',
+            baseUrl: 'https://pulse.example.com',
+          },
           uri: 'at://did:plc:creator/app.pulse.room/room1',
-          serverBaseUrl: 'https://pulse.example.com',
         },
       ],
     });
