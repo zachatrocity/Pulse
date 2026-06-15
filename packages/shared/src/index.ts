@@ -23,3 +23,5 @@ export const appInfo: AppInfo = {
   identity: 'atproto',
   media: 'webrtc',
 };
+
+export * from './atproto/records.js';

@@ -1,0 +1,18 @@
+{
+  "$type": "app.pulse.room",
+  "name": "Maintainer Standup",
+  "description": "A discoverable room for project maintainers. Listing is public; admission is invite-only.",
+  "createdAt": "2026-06-15T03:00:00Z",
+  "visibility": "inviteOnlyListing",
+  "joinMode": "invite",
+  "language": "en",
+  "tags": ["maintainers", "release"],
+  "server": {
+    "$type": "app.pulse.room.server",
+    "serviceDid": "did:web:pulse.example.com",
+    "baseUrl": "https://pulse.example.com",
+    "createdAt": "2026-06-15T02:30:00Z",
+    "software": "Pulse",
+    "version": "0.1.0"
+  }
+}

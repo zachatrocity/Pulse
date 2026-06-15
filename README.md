@@ -10,6 +10,8 @@ Pulse is a web-first, self-hosted voice product. The MVP is intentionally small:
 
 Pulse uses AT Protocol for identity and discovery because users can bring portable handles, profiles, and social graph context without Pulse becoming the source of truth for identity. Pulse uses WebRTC for voice because real-time media should flow peer-to-peer where possible instead of being tunneled through the AT Protocol network. In short: AT Protocol helps people find and trust each other; WebRTC carries the voice.
 
+Pulse room discovery records are defined as AT Protocol Lexicons in `packages/shared/src/lexicons`, with client-safe TypeScript contracts exported from `@pulse/shared`. See `docs/atproto/room-records.md` for the public record boundary, ownership model, indexing expectations, and compatibility rules.
+
 ## Tool Versions
 
 - Node.js `22.x` or newer. The repo includes `.nvmrc`.

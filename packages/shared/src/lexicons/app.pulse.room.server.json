@@ -1,0 +1,53 @@
+{
+  "lexicon": 1,
+  "id": "app.pulse.room.server",
+  "description": "Public hint for a Pulse server that can host room signaling and local authorization.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A server-owned public hint that lets clients discover where to connect for Pulse app APIs. It does not grant access to private rooms.",
+      "key": "literal:self",
+      "record": {
+        "type": "object",
+        "required": ["serviceDid", "baseUrl", "createdAt"],
+        "properties": {
+          "serviceDid": {
+            "type": "string",
+            "format": "did",
+            "description": "DID for the Pulse server or service account publishing this hint."
+          },
+          "baseUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "HTTPS origin for Pulse app APIs and WebRTC signaling."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Record creation time in RFC 3339 format."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Last meaningful server metadata update time."
+          },
+          "software": {
+            "type": "string",
+            "maxGraphemes": 80,
+            "description": "Server implementation name."
+          },
+          "version": {
+            "type": "string",
+            "maxGraphemes": 40,
+            "description": "Server implementation version."
+          },
+          "policyUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional public moderation or acceptable-use policy URL."
+          }
+        }
+      }
+    }
+  }
+}
