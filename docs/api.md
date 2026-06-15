@@ -139,15 +139,21 @@ Response:
     {
       "uri": "at://did:plc:creator/app.pulse.room/room1",
       "cid": "bafyroom",
-      "repo": "did:plc:creator",
       "rkey": "room1",
       "name": "Repair Cafe",
       "description": "Weekly hardware debugging",
       "visibility": "public",
       "joinMode": "open",
       "tags": [],
-      "serverDid": "did:plc:pulseserver",
-      "serverBaseUrl": "https://pulse.example.com",
+      "creator": {
+        "did": "did:plc:creator",
+        "handle": "creator.example",
+        "displayName": "Creator"
+      },
+      "server": {
+        "did": "did:plc:pulseserver",
+        "baseUrl": "https://pulse.example.com"
+      },
       "recordCreatedAt": "2026-06-15T00:00:00.000Z",
       "indexedAt": "2026-06-15T00:00:00.000Z"
     }
@@ -168,14 +174,20 @@ Response:
   "room": {
     "uri": "at://did:plc:creator/app.pulse.room/room1",
     "cid": "bafyroom",
-    "repo": "did:plc:creator",
     "rkey": "room1",
     "name": "Repair Cafe",
     "visibility": "public",
     "joinMode": "open",
     "tags": [],
-    "serverDid": "did:plc:pulseserver",
-    "serverBaseUrl": "https://pulse.example.com",
+    "creator": {
+      "did": "did:plc:creator",
+      "handle": "creator.example",
+      "displayName": "Creator"
+    },
+    "server": {
+      "did": "did:plc:pulseserver",
+      "baseUrl": "https://pulse.example.com"
+    },
     "recordCreatedAt": "2026-06-15T00:00:00.000Z",
     "indexedAt": "2026-06-15T00:00:00.000Z"
   }
