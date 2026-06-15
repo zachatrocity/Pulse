@@ -7,12 +7,23 @@ services:
       NODE_ENV: production
       PULSE_HOST: 0.0.0.0
       PULSE_PORT: 8787
+      PULSE_PUBLIC_URL: http://127.0.0.1:8787
       PULSE_WEB_ORIGIN: http://localhost:8787
+      PULSE_DATA_DIR: /data
+      PULSE_SESSION_SECRET: change-me-to-at-least-32-characters
+      PULSE_OAUTH_SCOPE: atproto repo:app.pulse.room repo:app.pulse.room.server repo:app.pulse.room.member repo:app.pulse.room.presence
+      # Required for real HTTPS deployments:
+      # PULSE_OAUTH_PRIVATE_KEY: '{"kty":"EC","kid":"...","crv":"P-256","x":"...","y":"...","d":"...","alg":"ES256"}'
     ports:
       - '8787:8787'
+    volumes:
+      - pulse-data:/data
     healthcheck:
       test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:8787/healthz']
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  pulse-data:

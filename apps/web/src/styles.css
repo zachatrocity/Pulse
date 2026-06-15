@@ -77,17 +77,21 @@ h1 {
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 32px;
+  align-items: end;
 }
 
-.button {
+.button,
+.icon-button {
   display: inline-flex;
   min-height: 44px;
   align-items: center;
   justify-content: center;
   border-radius: 6px;
+  border: 0;
   padding: 0 18px;
   font-weight: 700;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .button--primary {
@@ -95,9 +99,74 @@ h1 {
   color: #ffffff;
 }
 
+.button--primary:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .button--secondary {
   border: 1px solid #5b7564;
   background: rgba(255, 255, 255, 0.58);
+  color: #15382b;
+}
+
+.login-form {
+  display: grid;
+  gap: 8px;
+  width: min(100%, 460px);
+}
+
+.login-form label {
+  color: #27362d;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.login-form__row {
+  display: flex;
+  gap: 8px;
+}
+
+.login-form input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid #5b7564;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #17201b;
+  font: inherit;
+  min-height: 44px;
+  padding: 0 12px;
+}
+
+.form-error {
+  margin: 0;
+  color: #8b1d1d;
+  font-weight: 700;
+}
+
+.session-summary {
+  display: inline-flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(21, 56, 43, 0.24);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 0 8px 0 14px;
+  color: #27362d;
+}
+
+.session-summary svg {
+  width: 20px;
+  height: 20px;
+}
+
+.icon-button {
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+  background: #e9eee6;
   color: #15382b;
 }
 
@@ -179,5 +248,11 @@ h1 {
 
   .features {
     grid-template-columns: 1fr;
+  }
+
+  .actions,
+  .login-form__row {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
