@@ -1,0 +1,18 @@
+{
+  "$type": "app.pulse.room",
+  "name": "Homelab After Hours",
+  "description": "A public voice room for self-hosters comparing weekend deployments.",
+  "createdAt": "2026-06-15T02:40:00Z",
+  "visibility": "public",
+  "joinMode": "open",
+  "language": "en",
+  "tags": ["self-hosting", "homelab", "ops"],
+  "server": {
+    "$type": "app.pulse.room.server",
+    "serviceDid": "did:web:pulse.example.com",
+    "baseUrl": "https://pulse.example.com",
+    "createdAt": "2026-06-15T02:30:00Z",
+    "software": "Pulse",
+    "version": "0.1.0"
+  }
+}

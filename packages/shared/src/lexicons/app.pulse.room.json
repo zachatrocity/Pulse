@@ -1,0 +1,75 @@
+{
+  "lexicon": 1,
+  "id": "app.pulse.room",
+  "description": "Public discovery metadata for a Pulse voice room.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A public room listing owned by the room creator. This record is intentionally discoverable and must not contain private membership, invite tokens, call credentials, or ACL state.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["name", "createdAt", "visibility", "joinMode", "server"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxGraphemes": 80,
+            "description": "Human-readable room name."
+          },
+          "description": {
+            "type": "string",
+            "maxGraphemes": 600,
+            "description": "Short public room summary."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Record creation time in RFC 3339 format."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Last meaningful public metadata update time."
+          },
+          "visibility": {
+            "type": "string",
+            "knownValues": ["public", "inviteOnlyListing"],
+            "description": "Whether anyone can discover the room as public, or the room is listed publicly while admission remains invite-only in Pulse local state."
+          },
+          "joinMode": {
+            "type": "string",
+            "knownValues": ["open", "request", "invite"],
+            "description": "Public admission posture. The authoritative ACL remains app-local."
+          },
+          "language": {
+            "type": "string",
+            "format": "language",
+            "description": "Primary BCP 47 language tag for the room."
+          },
+          "tags": {
+            "type": "array",
+            "maxLength": 12,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxGraphemes": 32
+            },
+            "description": "Public discovery tags."
+          },
+          "server": {
+            "type": "ref",
+            "ref": "app.pulse.room.server",
+            "description": "The Pulse server that currently hosts room signaling and app-local authorization for this room."
+          },
+          "avatar": {
+            "type": "blob",
+            "accept": ["image/png", "image/jpeg", "image/webp"],
+            "maxSize": 1000000,
+            "description": "Optional public room avatar."
+          }
+        }
+      }
+    }
+  }
+}

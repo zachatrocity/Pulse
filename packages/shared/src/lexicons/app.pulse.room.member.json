@@ -1,0 +1,33 @@
+{
+  "lexicon": 1,
+  "id": "app.pulse.room.member",
+  "description": "Optional public membership signal for a Pulse room.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A self-asserted public membership or follow signal owned by the member. Pulse must not rely on this record for private room authorization.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["room", "createdAt", "state"],
+        "properties": {
+          "room": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong reference to an app.pulse.room record."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Record creation time in RFC 3339 format."
+          },
+          "state": {
+            "type": "string",
+            "knownValues": ["following", "member", "speaker"],
+            "description": "Public membership posture chosen by the account owner."
+          }
+        }
+      }
+    }
+  }
+}

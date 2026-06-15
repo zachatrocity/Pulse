@@ -1,0 +1,38 @@
+{
+  "lexicon": 1,
+  "id": "app.pulse.room.presence",
+  "description": "Optional public, coarse presence signal for a Pulse room.",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A coarse user-owned presence signal. This record is public and must not include IP addresses, device identifiers, WebRTC credentials, or exact private audience data.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["room", "status", "createdAt", "expiresAt"],
+        "properties": {
+          "room": {
+            "type": "ref",
+            "ref": "com.atproto.repo.strongRef",
+            "description": "Strong reference to an app.pulse.room record."
+          },
+          "status": {
+            "type": "string",
+            "knownValues": ["listening", "speaking"],
+            "description": "Public coarse presence state."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Record creation time in RFC 3339 format."
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "datetime",
+            "description": "Time after which indexers should ignore this presence signal."
+          }
+        }
+      }
+    }
+  }
+}
