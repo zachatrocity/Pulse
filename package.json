@@ -19,7 +19,7 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "npm run build -w @pulse/shared && npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
