@@ -137,6 +137,45 @@ export const createInviteResponseSchema = z.object({
 
 export type CreateInviteResponse = z.infer<typeof createInviteResponseSchema>;
 
+export const acceptInviteResponseSchema = z.object({
+  inviteId: z.string().min(1),
+  roomUri: z.string().startsWith('at://'),
+  acceptedByDid: z.string().startsWith('did:'),
+  acceptedAt: z.string().datetime(),
+});
+
+export type AcceptInviteResponse = z.infer<typeof acceptInviteResponseSchema>;
+
+export const roomMembershipSchema = z.object({
+  roomUri: z.string().startsWith('at://'),
+  did: z.string().startsWith('did:'),
+  role: z.enum(['owner', 'member']),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export type RoomMembership = z.infer<typeof roomMembershipSchema>;
+
+export const roomMembershipListResponseSchema = z.object({
+  members: z.array(roomMembershipSchema),
+});
+
+export type RoomMembershipListResponse = z.infer<typeof roomMembershipListResponseSchema>;
+
+export const roomMemberMutationResponseSchema = z.object({
+  roomUri: z.string().startsWith('at://'),
+  did: z.string().startsWith('did:'),
+  status: z.enum(['removed', 'banned']),
+});
+
+export type RoomMemberMutationResponse = z.infer<typeof roomMemberMutationResponseSchema>;
+
+export const roomMemberBanRequestSchema = z.object({
+  did: z.string().startsWith('did:'),
+});
+
+export type RoomMemberBanRequest = z.infer<typeof roomMemberBanRequestSchema>;
+
 export const voiceTokenRequestSchema = z.object({
   roomUri: z.string().startsWith('at://'),
   mode: z.enum(['listen', 'speak']).default('listen'),

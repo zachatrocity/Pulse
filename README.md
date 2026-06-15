@@ -86,6 +86,10 @@ GET /api/rooms?q=audio&limit=50
 
 The local index stores only public discovery metadata from Pulse room records. Deletes remove rooms from search, and updates replace the indexed record in place. Room API responses use DID-keyed `creator` and `server` principals; handles, display names, avatars, and PDS endpoints are returned only as mutable profile fields.
 
+## Local Room Access
+
+Private and invite-only room access is enforced by local SQLite tables in the Pulse API database. Room owners, accepted members, invites, and bans are keyed by DID and are not written to public AT Protocol records. Back up `PULSE_DATABASE_PATH` before upgrades because it contains both the public room index and the private room access policy.
+
 ## Identity Cache
 
 Pulse resolves AT Protocol identity in the API runtime and caches the client-safe profile snapshot in the same SQLite database as the room index. The cache key is always the DID. Handles are treated as refreshable display metadata because they can move to another DID.
@@ -114,7 +118,7 @@ The paved-road deployment is a single Docker image:
 docker compose up -d --build
 ```
 
-The container exposes port `8787` and serves both the API and built web UI. The `pulse-data` volume is required because AT Protocol OAuth state, refreshable sessions, signed web sessions, and the room index live under `/data`. Back up that volume before upgrades.
+The container exposes port `8787` and serves both the API and built web UI. The `pulse-data` volume is required because AT Protocol OAuth state, refreshable sessions, signed web sessions, the room index, and local room access policy live under `/data`. Back up that volume before upgrades.
 
 ## Upgrade Notes
 

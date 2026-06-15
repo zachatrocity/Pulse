@@ -1,6 +1,12 @@
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { createApp } from './app.js';
+import { createSessionId, sessionCookieName, signSessionId } from './auth/cookies.js';
+import { FileAuthStore } from './auth/store.js';
 import { loadConfig } from './config.js';
 import type { AtprotoIdentityService } from './identity/service.js';
 import { RoomIndexStore } from './rooms/store.js';
@@ -39,6 +45,28 @@ const identityService = {
       ['did:plc:pulseserver', { did: 'did:plc:pulseserver' }],
     ]),
 } as unknown as AtprotoIdentityService;
+
+const createTestAuth = async (did: string) => {
+  const config = loadConfig({});
+  const authStore = new FileAuthStore(
+    join(await mkdtemp(join(tmpdir(), 'pulse-auth-')), 'auth.json'),
+  );
+  const sessionId = createSessionId();
+
+  await authStore.setWebSession(sessionId, {
+    did,
+    handle: `${did.slice(did.lastIndexOf(':') + 1)}.example`,
+    pdsEndpoint: 'https://pds.example.com',
+    scope: config.oauthScope,
+    createdAt: '2026-06-15T00:00:00.000Z',
+    updatedAt: '2026-06-15T00:00:00.000Z',
+  });
+
+  return {
+    authStore,
+    cookie: `${sessionCookieName}=${signSessionId(sessionId, config.sessionSecret)}`,
+  };
+};
 
 describe('api app', () => {
   it('returns health information', async () => {
@@ -232,27 +260,138 @@ describe('api app', () => {
     });
   });
 
-  it('keeps invite and voice-token contracts explicit before stateful features exist', async () => {
+  it('creates private room invites locally and accepts them into membership', async () => {
     const roomStore = new RoomIndexStore();
-    roomStore.upsertRoom(indexedRoomInput);
-    const app = createApp(loadConfig({}), { roomStore });
+    roomStore.upsertRoom({
+      ...indexedRoomInput,
+      record: {
+        ...indexedRoomInput.record,
+        joinMode: 'invite',
+      },
+    });
+    const { authStore, cookie } = await createTestAuth('did:plc:creator');
+    const app = createApp(loadConfig({}), { roomStore, authStore });
     const roomUri = encodeURIComponent(indexedRoomInput.uri);
 
     const invite = await app.request(`/api/rooms/${roomUri}/invites`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({ recipientDid: 'did:plc:invitee', expiresInSeconds: 3600 }),
     });
+
+    expect(invite.status).toBe(201);
+    const inviteBody = await invite.json();
+    expect(inviteBody).toMatchObject({
+      roomUri: indexedRoomInput.uri,
+      expiresAt: expect.any(String),
+    });
+    expect(inviteBody.inviteId).toMatch(/^inv_/);
+
+    const invitee = await createTestAuth('did:plc:invitee');
+    const inviteeApp = createApp(loadConfig({}), { roomStore, authStore: invitee.authStore });
+    const accepted = await inviteeApp.request(`/api/invites/${inviteBody.inviteId}/accept`, {
+      method: 'POST',
+      headers: { Cookie: invitee.cookie },
+    });
+
+    expect(accepted.status).toBe(200);
+    await expect(accepted.json()).resolves.toMatchObject({
+      inviteId: inviteBody.inviteId,
+      roomUri: indexedRoomInput.uri,
+      acceptedByDid: 'did:plc:invitee',
+    });
+    expect(roomStore.getMembership(indexedRoomInput.uri, 'did:plc:invitee')).toMatchObject({
+      role: 'member',
+    });
+  });
+
+  it('rejects private room voice tokens for non-members before media token minting', async () => {
+    const roomStore = new RoomIndexStore();
+    roomStore.upsertRoom({
+      ...indexedRoomInput,
+      record: {
+        ...indexedRoomInput.record,
+        joinMode: 'invite',
+      },
+    });
+    const app = createApp(loadConfig({}), { roomStore });
+
     const voiceToken = await app.request('/api/voice-token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ roomUri: indexedRoomInput.uri, mode: 'listen' }),
     });
 
-    expect(invite.status).toBe(501);
-    await expect(invite.json()).resolves.toEqual({
-      error: 'Room invites require authenticated room membership and are not enabled yet.',
+    expect(voiceToken.status).toBe(401);
+    await expect(voiceToken.json()).resolves.toEqual({
+      error: 'Sign in to join this private room.',
     });
+  });
+
+  it('lets owners remove and ban members from local room ACLs', async () => {
+    const roomStore = new RoomIndexStore();
+    roomStore.upsertRoom({
+      ...indexedRoomInput,
+      record: {
+        ...indexedRoomInput.record,
+        joinMode: 'invite',
+      },
+    });
+    const owner = await createTestAuth('did:plc:creator');
+    const app = createApp(loadConfig({}), { roomStore, authStore: owner.authStore });
+    const roomUri = encodeURIComponent(indexedRoomInput.uri);
+    const invite = await app.request(`/api/rooms/${roomUri}/invites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ recipientDid: 'did:plc:member' }),
+    });
+    const inviteBody = await invite.json();
+    const member = await createTestAuth('did:plc:member');
+    const memberApp = createApp(loadConfig({}), { roomStore, authStore: member.authStore });
+    await memberApp.request(`/api/invites/${inviteBody.inviteId}/accept`, {
+      method: 'POST',
+      headers: { Cookie: member.cookie },
+    });
+
+    const removed = await app.request(`/api/rooms/${roomUri}/members/did:plc:member`, {
+      method: 'DELETE',
+      headers: { Cookie: owner.cookie },
+    });
+
+    expect(removed.status).toBe(200);
+    await expect(removed.json()).resolves.toEqual({
+      roomUri: indexedRoomInput.uri,
+      did: 'did:plc:member',
+      status: 'removed',
+    });
+    expect(roomStore.getMembership(indexedRoomInput.uri, 'did:plc:member')).toBeNull();
+
+    const banned = await app.request(`/api/rooms/${roomUri}/bans`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: owner.cookie },
+      body: JSON.stringify({ did: 'did:plc:member' }),
+    });
+
+    expect(banned.status).toBe(200);
+    await expect(banned.json()).resolves.toEqual({
+      roomUri: indexedRoomInput.uri,
+      did: 'did:plc:member',
+      status: 'banned',
+    });
+    expect(roomStore.isBanned(indexedRoomInput.uri, 'did:plc:member')).toBe(true);
+  });
+
+  it('still keeps media token minting explicit after authorized room access', async () => {
+    const roomStore = new RoomIndexStore();
+    roomStore.upsertRoom(indexedRoomInput);
+    const app = createApp(loadConfig({}), { roomStore });
+
+    const voiceToken = await app.request('/api/voice-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomUri: indexedRoomInput.uri, mode: 'listen' }),
+    });
+
     expect(voiceToken.status).toBe(501);
     await expect(voiceToken.json()).resolves.toEqual({
       error: 'Voice token minting requires configured media credentials and is not enabled yet.',
