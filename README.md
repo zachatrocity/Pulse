@@ -12,6 +12,8 @@ Pulse uses AT Protocol for identity and discovery because users can bring portab
 
 Pulse room discovery records are defined as AT Protocol Lexicons in `packages/shared/src/lexicons`, with client-safe TypeScript contracts exported from `@pulse/shared`. See `docs/atproto/room-records.md` for the public record boundary, ownership model, indexing expectations, and compatibility rules.
 
+The HTTP API contract lives in `docs/api.md`. It names the mobile-ready routes for identity, discovery, room policy, invites, and voice-token minting while documenting which browser OAuth routes are web-only today.
+
 ## Tool Versions
 
 - Node.js `22.x` or newer. The repo includes `.nvmrc`.

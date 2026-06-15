@@ -4,6 +4,25 @@ import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { RoomIndexStore } from './rooms/store.js';
 
+const indexedRoomInput = {
+  uri: 'at://did:plc:creator/app.pulse.room/room1' as const,
+  cid: 'bafyroom',
+  repo: 'did:plc:creator' as const,
+  rkey: 'room1',
+  record: {
+    name: 'Repair Cafe',
+    description: 'Weekly hardware debugging',
+    createdAt: '2026-06-15T00:00:00.000Z',
+    visibility: 'public' as const,
+    joinMode: 'open' as const,
+    server: {
+      serviceDid: 'did:plc:pulseserver' as const,
+      baseUrl: 'https://pulse.example.com' as const,
+      createdAt: '2026-06-15T00:00:00.000Z',
+    },
+  },
+};
+
 describe('api app', () => {
   it('returns health information', async () => {
     const app = createApp(loadConfig({}));
@@ -85,24 +104,7 @@ describe('api app', () => {
 
   it('returns searchable indexed rooms', async () => {
     const roomStore = new RoomIndexStore();
-    roomStore.upsertRoom({
-      uri: 'at://did:plc:creator/app.pulse.room/room1',
-      cid: 'bafyroom',
-      repo: 'did:plc:creator',
-      rkey: 'room1',
-      record: {
-        name: 'Repair Cafe',
-        description: 'Weekly hardware debugging',
-        createdAt: '2026-06-15T00:00:00.000Z',
-        visibility: 'public',
-        joinMode: 'open',
-        server: {
-          serviceDid: 'did:plc:pulseserver',
-          baseUrl: 'https://pulse.example.com',
-          createdAt: '2026-06-15T00:00:00.000Z',
-        },
-      },
-    });
+    roomStore.upsertRoom(indexedRoomInput);
     const app = createApp(loadConfig({}), { roomStore });
 
     const response = await app.request('/api/rooms?q=hardware');
@@ -115,6 +117,92 @@ describe('api app', () => {
           serverBaseUrl: 'https://pulse.example.com',
         },
       ],
+    });
+  });
+
+  it('returns the mobile-ready discovery alias with the same room shape', async () => {
+    const roomStore = new RoomIndexStore();
+    roomStore.upsertRoom(indexedRoomInput);
+    const app = createApp(loadConfig({}), { roomStore });
+
+    const response = await app.request('/api/discovery/rooms?q=hardware');
+
+    await expect(response.json()).resolves.toMatchObject({
+      rooms: [
+        {
+          cid: 'bafyroom',
+          joinMode: 'open',
+          name: 'Repair Cafe',
+          repo: 'did:plc:creator',
+          rkey: 'room1',
+          serverDid: 'did:plc:pulseserver',
+          serverBaseUrl: 'https://pulse.example.com',
+          uri: 'at://did:plc:creator/app.pulse.room/room1',
+          visibility: 'public',
+        },
+      ],
+    });
+  });
+
+  it('returns room detail and policy by encoded AT URI', async () => {
+    const roomStore = new RoomIndexStore();
+    roomStore.upsertRoom(indexedRoomInput);
+    const app = createApp(loadConfig({}), { roomStore });
+    const roomUri = encodeURIComponent(indexedRoomInput.uri);
+
+    const detail = await app.request(`/api/rooms/${roomUri}`);
+    const policy = await app.request(`/api/rooms/${roomUri}/policy`);
+
+    await expect(detail.json()).resolves.toMatchObject({
+      room: {
+        name: 'Repair Cafe',
+        uri: indexedRoomInput.uri,
+      },
+    });
+    await expect(policy.json()).resolves.toEqual({
+      roomUri: indexedRoomInput.uri,
+      joinMode: 'open',
+      visibility: 'public',
+      requiresInvite: false,
+      requestToSpeak: false,
+      serverDid: 'did:plc:pulseserver',
+    });
+  });
+
+  it('returns an anonymous mobile identity state without browser session support', async () => {
+    const app = createApp(loadConfig({}));
+
+    const response = await app.request('/api/identity/me');
+
+    await expect(response.json()).resolves.toEqual({
+      authenticated: false,
+    });
+  });
+
+  it('keeps invite and voice-token contracts explicit before stateful features exist', async () => {
+    const roomStore = new RoomIndexStore();
+    roomStore.upsertRoom(indexedRoomInput);
+    const app = createApp(loadConfig({}), { roomStore });
+    const roomUri = encodeURIComponent(indexedRoomInput.uri);
+
+    const invite = await app.request(`/api/rooms/${roomUri}/invites`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const voiceToken = await app.request('/api/voice-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomUri: indexedRoomInput.uri, mode: 'listen' }),
+    });
+
+    expect(invite.status).toBe(501);
+    await expect(invite.json()).resolves.toEqual({
+      error: 'Room invites require authenticated room membership and are not enabled yet.',
+    });
+    expect(voiceToken.status).toBe(501);
+    await expect(voiceToken.json()).resolves.toEqual({
+      error: 'Voice token minting requires configured media credentials and is not enabled yet.',
     });
   });
 });
