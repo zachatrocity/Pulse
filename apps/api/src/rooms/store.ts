@@ -24,6 +24,18 @@ export type IndexedRoom = {
   indexedAt: string;
 };
 
+export type RoomRuntimeState = {
+  roomUri: AtUri;
+  ownerDid: Did;
+  serverDid: Did;
+  serverBaseUrl: string;
+  visibility: PulseRoomRecord['visibility'];
+  joinMode: PulseRoomRecord['joinMode'];
+  voiceSessionId?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type RoomSearchOptions = {
   query?: string;
   limit?: number;
@@ -108,6 +120,59 @@ export class RoomIndexStore {
     return row ? mapRoomRow(row) : null;
   }
 
+  upsertRoomRuntimeState(input: {
+    roomUri: AtUri;
+    ownerDid: Did;
+    serverDid: Did;
+    serverBaseUrl: string;
+    visibility: PulseRoomRecord['visibility'];
+    joinMode: PulseRoomRecord['joinMode'];
+    voiceSessionId?: string;
+    createdAt?: string;
+    updatedAt?: string;
+  }) {
+    const now = new Date().toISOString();
+    const createdAt = input.createdAt ?? now;
+    const updatedAt = input.updatedAt ?? now;
+
+    this.database
+      .prepare(
+        `
+          INSERT INTO room_runtime_state (
+            room_uri, owner_did, server_did, server_base_url, visibility,
+            join_mode, voice_session_id, created_at, updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(room_uri) DO UPDATE SET
+            owner_did = excluded.owner_did,
+            server_did = excluded.server_did,
+            server_base_url = excluded.server_base_url,
+            visibility = excluded.visibility,
+            join_mode = excluded.join_mode,
+            voice_session_id = excluded.voice_session_id,
+            updated_at = excluded.updated_at
+        `,
+      )
+      .run(
+        input.roomUri,
+        input.ownerDid,
+        input.serverDid,
+        input.serverBaseUrl,
+        input.visibility,
+        input.joinMode,
+        input.voiceSessionId ?? null,
+        createdAt,
+        updatedAt,
+      );
+  }
+
+  getRoomRuntimeState(roomUri: AtUri): RoomRuntimeState | null {
+    const row = this.database
+      .prepare('SELECT * FROM room_runtime_state WHERE room_uri = ?')
+      .get(roomUri);
+    return row ? mapRuntimeStateRow(row) : null;
+  }
+
   searchRooms(options: RoomSearchOptions = {}): IndexedRoom[] {
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
     const query = options.query?.trim();
@@ -165,6 +230,22 @@ export class RoomIndexStore {
       CREATE INDEX IF NOT EXISTS indexed_rooms_repo_idx ON indexed_rooms(repo);
       CREATE INDEX IF NOT EXISTS indexed_rooms_visibility_idx ON indexed_rooms(visibility);
       CREATE INDEX IF NOT EXISTS indexed_rooms_indexed_at_idx ON indexed_rooms(indexed_at);
+
+      CREATE TABLE IF NOT EXISTS room_runtime_state (
+        room_uri TEXT PRIMARY KEY,
+        owner_did TEXT NOT NULL,
+        server_did TEXT NOT NULL,
+        server_base_url TEXT NOT NULL,
+        visibility TEXT NOT NULL,
+        join_mode TEXT NOT NULL,
+        voice_session_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY(room_uri) REFERENCES indexed_rooms(uri) ON DELETE CASCADE
+      );
+
+      CREATE INDEX IF NOT EXISTS room_runtime_state_owner_idx ON room_runtime_state(owner_did);
+      CREATE INDEX IF NOT EXISTS room_runtime_state_policy_idx ON room_runtime_state(visibility, join_mode);
     `);
   }
 }
@@ -204,6 +285,32 @@ const mapRoomRow = (row: unknown): IndexedRoom => {
     recordCreatedAt: room.record_created_at,
     recordUpdatedAt: room.record_updated_at ?? undefined,
     indexedAt: room.indexed_at,
+  };
+};
+
+const mapRuntimeStateRow = (row: unknown): RoomRuntimeState => {
+  const state = row as {
+    room_uri: string;
+    owner_did: string;
+    server_did: string;
+    server_base_url: string;
+    visibility: PulseRoomRecord['visibility'];
+    join_mode: PulseRoomRecord['joinMode'];
+    voice_session_id: string | null;
+    created_at: string;
+    updated_at: string;
+  };
+
+  return {
+    roomUri: state.room_uri as AtUri,
+    ownerDid: state.owner_did as Did,
+    serverDid: state.server_did as Did,
+    serverBaseUrl: state.server_base_url,
+    visibility: state.visibility,
+    joinMode: state.join_mode,
+    voiceSessionId: state.voice_session_id ?? undefined,
+    createdAt: state.created_at,
+    updatedAt: state.updated_at,
   };
 };
 

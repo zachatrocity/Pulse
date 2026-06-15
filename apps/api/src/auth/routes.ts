@@ -42,7 +42,7 @@ const jsonError = (message: string) => apiErrorSchema.parse({ error: message });
 const normalizeHandle = (handle: string): string =>
   handle.trim().replace(/^@/, '').toLocaleLowerCase();
 
-const getCurrentWebSession = async ({
+export const getCurrentWebSession = async ({
   config,
   store,
   cookie,

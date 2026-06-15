@@ -10,6 +10,7 @@ export type RuntimeConfig = {
   oauthScope: string;
   databasePath: string;
   atprotoPdsUrl: string;
+  serverDid: string;
   indexerRepos: string[];
   indexerJetstreamUrl?: string;
 };
@@ -109,6 +110,19 @@ const validatePrivateKey = (
   return value;
 };
 
+const validateDid = (value: string | undefined, nodeEnv: string): string => {
+  const did = value?.trim();
+  if (did?.startsWith('did:')) {
+    return did;
+  }
+
+  if (nodeEnv === 'production') {
+    throw new Error('PULSE_SERVER_DID must be set to a valid DID in production');
+  }
+
+  return 'did:web:localhost';
+};
+
 export const loadConfig = (env: NodeJS.ProcessEnv = process.env): RuntimeConfig => {
   const nodeEnv = env.NODE_ENV ?? 'development';
   const port = parsePort(env.PULSE_PORT);
@@ -133,6 +147,7 @@ export const loadConfig = (env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
       env.PULSE_ATPROTO_PDS_URL ?? 'https://bsky.social',
       'PULSE_ATPROTO_PDS_URL',
     ),
+    serverDid: validateDid(env.PULSE_SERVER_DID, nodeEnv),
     indexerRepos: parseList(env.PULSE_INDEXER_REPOS),
     indexerJetstreamUrl: emptyToUndefined(env.PULSE_INDEXER_JETSTREAM_URL),
   };

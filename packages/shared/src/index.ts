@@ -94,6 +94,49 @@ export const roomSummarySchema = z.object({
 
 export type RoomSummary = z.infer<typeof roomSummarySchema>;
 
+const roomDescriptionSchema = z
+  .string()
+  .trim()
+  .max(600)
+  .transform((value) => (value.length > 0 ? value : undefined))
+  .optional();
+
+const roomTagsSchema = z.array(z.string().trim().min(1).max(32)).max(12).default([]);
+
+export const createRoomRequestSchema = z.object({
+  title: z.string().trim().min(1).max(80),
+  description: roomDescriptionSchema,
+  visibility: z.enum(['public', 'inviteOnlyListing']).default('public'),
+  joinMode: z.enum(['open', 'request', 'invite']).default('open'),
+  language: z.string().trim().min(2).max(35).optional(),
+  tags: roomTagsSchema,
+});
+
+export type CreateRoomRequest = z.infer<typeof createRoomRequestSchema>;
+
+export const createRoomResponseSchema = z.object({
+  room: roomSummarySchema,
+});
+
+export type CreateRoomResponse = z.infer<typeof createRoomResponseSchema>;
+
+export const updateRoomRequestSchema = z.object({
+  title: z.string().trim().min(1).max(80).optional(),
+  description: roomDescriptionSchema,
+  visibility: z.enum(['public', 'inviteOnlyListing']).optional(),
+  joinMode: z.enum(['open', 'request', 'invite']).optional(),
+  language: z.string().trim().min(2).max(35).optional(),
+  tags: roomTagsSchema.optional(),
+});
+
+export type UpdateRoomRequest = z.infer<typeof updateRoomRequestSchema>;
+
+export const updateRoomResponseSchema = z.object({
+  room: roomSummarySchema,
+});
+
+export type UpdateRoomResponse = z.infer<typeof updateRoomResponseSchema>;
+
 export const roomListResponseSchema = z.object({
   rooms: z.array(roomSummarySchema),
 });
