@@ -215,8 +215,10 @@ Response:
 
 ### `POST /api/rooms/:roomUri/invites`
 
-Mobile-ready invite creation contract. This endpoint is intentionally not enabled
-until authenticated room membership exists.
+Creates a local room invite. Invites, room membership, and bans are stored in the
+Pulse SQLite database, never in public AT Protocol room records. The caller must
+be signed in and must have the local `owner` role for the room. The indexed room
+creator DID is seeded as the first owner when the room is indexed.
 
 Request:
 
@@ -227,21 +229,89 @@ Request:
 }
 ```
 
-Current response:
-
-```json
-{
-  "error": "Room invites require authenticated room membership and are not enabled yet."
-}
-```
-
-Future success response:
+Success response:
 
 ```json
 {
   "inviteId": "inv_123",
   "roomUri": "at://did:plc:creator/app.pulse.room/room1",
   "expiresAt": "2026-06-22T00:00:00.000Z"
+}
+```
+
+### `POST /api/invites/:inviteId/accept`
+
+Accepts a local invite for the signed-in AT Protocol user. Recipient-bound
+invites can only be accepted by the matching DID. Expired, already accepted,
+unknown, or banned-user invites are rejected.
+
+Response:
+
+```json
+{
+  "inviteId": "inv_123",
+  "roomUri": "at://did:plc:creator/app.pulse.room/room1",
+  "acceptedByDid": "did:plc:invitee",
+  "acceptedAt": "2026-06-15T00:00:00.000Z"
+}
+```
+
+### `GET /api/rooms/:roomUri/members`
+
+Returns local room membership for signed-in room members. Membership is keyed by
+DID; handles and profiles are resolved separately through the identity APIs.
+
+Response:
+
+```json
+{
+  "members": [
+    {
+      "roomUri": "at://did:plc:creator/app.pulse.room/room1",
+      "did": "did:plc:creator",
+      "role": "owner",
+      "createdAt": "2026-06-15T00:00:00.000Z",
+      "updatedAt": "2026-06-15T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### `DELETE /api/rooms/:roomUri/members/:memberDid`
+
+Removes a local room member. The caller must be a room owner. Owners cannot be
+removed through this endpoint.
+
+Response:
+
+```json
+{
+  "roomUri": "at://did:plc:creator/app.pulse.room/room1",
+  "did": "did:plc:member",
+  "status": "removed"
+}
+```
+
+### `POST /api/rooms/:roomUri/bans`
+
+Bans a DID from a local room and removes any non-owner membership for that DID.
+The caller must be a room owner. Owners cannot be banned.
+
+Request:
+
+```json
+{
+  "did": "did:plc:member"
+}
+```
+
+Response:
+
+```json
+{
+  "roomUri": "at://did:plc:creator/app.pulse.room/room1",
+  "did": "did:plc:member",
+  "status": "banned"
 }
 ```
 
@@ -261,7 +331,11 @@ Request:
 }
 ```
 
-Current response:
+For invite-only rooms, the API checks local membership and bans before reaching
+the media-token backend. Non-members receive `401` when unsigned and `403` when
+signed in without access.
+
+Current response after room access is authorized:
 
 ```json
 {

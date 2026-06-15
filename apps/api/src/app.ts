@@ -1,13 +1,19 @@
 import { Hono } from 'hono';
+import { getCookie } from 'hono/cookie';
 import { cors } from 'hono/cors';
 import { serveStatic } from '@hono/node-server/serve-static';
 import {
+  acceptInviteResponseSchema,
   apiErrorSchema,
   appInfo,
   authStatusSchema,
   createInviteRequestSchema,
+  createInviteResponseSchema,
   healthSchema,
   identityResolveResponseSchema,
+  roomMemberMutationResponseSchema,
+  roomMemberBanRequestSchema,
+  roomMembershipListResponseSchema,
   roomDetailResponseSchema,
   roomListResponseSchema,
   roomPolicyResponseSchema,
@@ -18,6 +24,7 @@ import {
 import type { AtUri } from '@pulse/shared';
 
 import { registerAuthRoutes } from './auth/routes.js';
+import { sessionCookieName, verifySignedSessionId } from './auth/cookies.js';
 import { FileAuthStore } from './auth/store.js';
 import type { RuntimeConfig } from './config.js';
 import { AtprotoIdentityService, IdentityCacheStore } from './identity/service.js';
@@ -29,11 +36,12 @@ import type { IndexedRoom } from './rooms/store.js';
 export type AppDependencies = {
   roomStore?: RoomIndexStore;
   identityService?: AtprotoIdentityService;
+  authStore?: FileAuthStore;
 };
 
 export const createApp = (config: RuntimeConfig, dependencies: AppDependencies = {}) => {
   const app = new Hono();
-  const authStore = FileAuthStore.fromDataDir(config.dataDir);
+  const authStore = dependencies.authStore ?? FileAuthStore.fromDataDir(config.dataDir);
   const roomStore = dependencies.roomStore ?? new RoomIndexStore();
   const identityService =
     dependencies.identityService ??
@@ -43,7 +51,7 @@ export const createApp = (config: RuntimeConfig, dependencies: AppDependencies =
     '/api/*',
     cors({
       origin: config.webOrigin,
-      allowMethods: ['GET', 'POST', 'OPTIONS'],
+      allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
       allowHeaders: ['Content-Type', 'Authorization'],
       credentials: true,
     }),
@@ -145,11 +153,177 @@ export const createApp = (config: RuntimeConfig, dependencies: AppDependencies =
       return c.json(apiErrorSchema.parse({ error: 'Room not found.' }), 404);
     }
 
+    const actorDid = await getAuthenticatedDid({
+      config,
+      store: authStore,
+      cookie: getCookie(c, sessionCookieName),
+    });
+    if (!actorDid) {
+      return c.json(apiErrorSchema.parse({ error: 'Sign in to invite room members.' }), 401);
+    }
+
+    const actorMembership = roomStore.getMembership(roomUri, actorDid);
+    if (actorMembership?.role !== 'owner') {
+      return c.json(apiErrorSchema.parse({ error: 'Only room owners can invite members.' }), 403);
+    }
+
+    const invite = roomStore.createInvite({
+      roomUri,
+      createdByDid: actorDid,
+      recipientDid: payload.data.recipientDid as Did | undefined,
+      expiresInSeconds: payload.data.expiresInSeconds,
+    });
+
     return c.json(
-      apiErrorSchema.parse({
-        error: 'Room invites require authenticated room membership and are not enabled yet.',
+      createInviteResponseSchema.parse({
+        inviteId: invite.id,
+        roomUri: invite.roomUri,
+        expiresAt: invite.expiresAt,
       }),
-      501,
+      201,
+    );
+  });
+
+  app.post('/api/invites/:inviteId/accept', async (c) => {
+    const actorDid = await getAuthenticatedDid({
+      config,
+      store: authStore,
+      cookie: getCookie(c, sessionCookieName),
+    });
+    if (!actorDid) {
+      return c.json(apiErrorSchema.parse({ error: 'Sign in to accept a room invite.' }), 401);
+    }
+
+    const invite = roomStore.acceptInvite(c.req.param('inviteId'), actorDid);
+    if (!invite?.acceptedAt || !invite.acceptedByDid) {
+      return c.json(
+        apiErrorSchema.parse({ error: 'Invite is invalid, expired, or unavailable.' }),
+        404,
+      );
+    }
+
+    return c.json(
+      acceptInviteResponseSchema.parse({
+        inviteId: invite.id,
+        roomUri: invite.roomUri,
+        acceptedByDid: invite.acceptedByDid,
+        acceptedAt: invite.acceptedAt,
+      }),
+    );
+  });
+
+  app.get('/api/rooms/:roomUri/members', async (c) => {
+    const roomUri = decodeRoomUri(c.req.param('roomUri'));
+    if (!roomUri) {
+      return c.json(apiErrorSchema.parse({ error: 'Room URI must be URL-encoded.' }), 400);
+    }
+
+    if (!roomStore.getRoom(roomUri)) {
+      return c.json(apiErrorSchema.parse({ error: 'Room not found.' }), 404);
+    }
+
+    const actorDid = await getAuthenticatedDid({
+      config,
+      store: authStore,
+      cookie: getCookie(c, sessionCookieName),
+    });
+    if (!actorDid) {
+      return c.json(apiErrorSchema.parse({ error: 'Sign in to view room members.' }), 401);
+    }
+
+    const actorMembership = roomStore.getMembership(roomUri, actorDid);
+    if (!actorMembership) {
+      return c.json(apiErrorSchema.parse({ error: 'Only room members can view membership.' }), 403);
+    }
+
+    return c.json(
+      roomMembershipListResponseSchema.parse({
+        members: roomStore.listMemberships(roomUri),
+      }),
+    );
+  });
+
+  app.delete('/api/rooms/:roomUri/members/:memberDid', async (c) => {
+    const roomUri = decodeRoomUri(c.req.param('roomUri'));
+    if (!roomUri) {
+      return c.json(apiErrorSchema.parse({ error: 'Room URI must be URL-encoded.' }), 400);
+    }
+
+    if (!roomStore.getRoom(roomUri)) {
+      return c.json(apiErrorSchema.parse({ error: 'Room not found.' }), 404);
+    }
+
+    const actorDid = await getAuthenticatedDid({
+      config,
+      store: authStore,
+      cookie: getCookie(c, sessionCookieName),
+    });
+    if (!actorDid) {
+      return c.json(apiErrorSchema.parse({ error: 'Sign in to remove room members.' }), 401);
+    }
+
+    const actorMembership = roomStore.getMembership(roomUri, actorDid);
+    if (actorMembership?.role !== 'owner') {
+      return c.json(apiErrorSchema.parse({ error: 'Only room owners can remove members.' }), 403);
+    }
+
+    const memberDid = c.req.param('memberDid') as Did;
+    if (!memberDid.startsWith('did:')) {
+      return c.json(apiErrorSchema.parse({ error: 'Member DID is invalid.' }), 400);
+    }
+
+    if (!roomStore.removeMembership(roomUri, memberDid)) {
+      return c.json(apiErrorSchema.parse({ error: 'Member was not removable.' }), 400);
+    }
+
+    return c.json(
+      roomMemberMutationResponseSchema.parse({
+        roomUri,
+        did: memberDid,
+        status: 'removed',
+      }),
+    );
+  });
+
+  app.post('/api/rooms/:roomUri/bans', async (c) => {
+    const roomUri = decodeRoomUri(c.req.param('roomUri'));
+    if (!roomUri) {
+      return c.json(apiErrorSchema.parse({ error: 'Room URI must be URL-encoded.' }), 400);
+    }
+
+    const payload = roomMemberBanRequestSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!payload.success) {
+      return c.json(apiErrorSchema.parse({ error: 'Ban request requires a DID.' }), 400);
+    }
+
+    if (!roomStore.getRoom(roomUri)) {
+      return c.json(apiErrorSchema.parse({ error: 'Room not found.' }), 404);
+    }
+
+    const actorDid = await getAuthenticatedDid({
+      config,
+      store: authStore,
+      cookie: getCookie(c, sessionCookieName),
+    });
+    if (!actorDid) {
+      return c.json(apiErrorSchema.parse({ error: 'Sign in to ban room members.' }), 401);
+    }
+
+    const actorMembership = roomStore.getMembership(roomUri, actorDid);
+    if (actorMembership?.role !== 'owner') {
+      return c.json(apiErrorSchema.parse({ error: 'Only room owners can ban members.' }), 403);
+    }
+
+    if (!roomStore.banMember(roomUri, payload.data.did as Did, actorDid)) {
+      return c.json(apiErrorSchema.parse({ error: 'Room owners cannot be banned.' }), 400);
+    }
+
+    return c.json(
+      roomMemberMutationResponseSchema.parse({
+        roomUri,
+        did: payload.data.did,
+        status: 'banned',
+      }),
     );
   });
 
@@ -162,6 +336,24 @@ export const createApp = (config: RuntimeConfig, dependencies: AppDependencies =
     const room = roomStore.getRoom(payload.data.roomUri as AtUri);
     if (!room) {
       return c.json(apiErrorSchema.parse({ error: 'Room not found.' }), 404);
+    }
+
+    const actorDid = await getAuthenticatedDid({
+      config,
+      store: authStore,
+      cookie: getCookie(c, sessionCookieName),
+    });
+    const access = roomStore.canAccessRoom(room, actorDid);
+    if (!access.allowed) {
+      return c.json(
+        apiErrorSchema.parse({
+          error:
+            access.reason === 'authentication_required'
+              ? 'Sign in to join this private room.'
+              : 'You do not have access to this private room.',
+        }),
+        access.reason === 'authentication_required' ? 401 : 403,
+      );
     }
 
     return c.json(
@@ -219,6 +411,24 @@ const decodeRoomUri = (value: string): AtUri | null => {
   } catch {
     return null;
   }
+};
+
+const getAuthenticatedDid = async ({
+  config,
+  store,
+  cookie,
+}: {
+  config: RuntimeConfig;
+  store: FileAuthStore;
+  cookie: string | undefined;
+}): Promise<Did | null> => {
+  const sessionId = verifySignedSessionId(cookie, config.sessionSecret);
+  if (!sessionId) {
+    return null;
+  }
+
+  const session = await store.getWebSession(sessionId);
+  return session?.did.startsWith('did:') ? (session.did as Did) : null;
 };
 
 const mapRoomSummary = (
