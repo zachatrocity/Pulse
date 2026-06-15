@@ -1,7 +1,7 @@
-import { Activity, Radio, ShieldCheck, Waves } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Activity, LogOut, Radio, ShieldCheck, UserRound, Waves } from 'lucide-react';
+import { type FormEvent, useEffect, useState } from 'react';
 
-import type { AppInfo } from '@pulse/shared';
+import type { ApiError, AppInfo, AuthLoginResponse, AuthStatus } from '@pulse/shared';
 
 const defaultInfo: AppInfo = {
   name: 'Pulse',
@@ -12,6 +12,10 @@ const defaultInfo: AppInfo = {
 
 export const App = () => {
   const [info, setInfo] = useState<AppInfo>(defaultInfo);
+  const [auth, setAuth] = useState<AuthStatus>({ authenticated: false });
+  const [handle, setHandle] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -34,6 +38,67 @@ export const App = () => {
     };
   }, []);
 
+  useEffect(() => {
+    let ignore = false;
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.has('auth_error')) {
+      setAuthError('AT Protocol sign-in did not complete. Try again from your handle.');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    fetch('/api/auth/session', { credentials: 'include' })
+      .then((response) => response.json() as Promise<AuthStatus>)
+      .then((payload) => {
+        if (!ignore) {
+          setAuth(payload);
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setAuth({ authenticated: false });
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const signIn = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAuthError(null);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch('/api/auth/atproto/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ handle }),
+      });
+
+      if (!response.ok) {
+        const error = (await response.json()) as ApiError;
+        throw new Error(error.error);
+      }
+
+      const payload = (await response.json()) as AuthLoginResponse;
+      window.location.assign(payload.authorizationUrl);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Could not start sign-in.');
+      setIsSubmitting(false);
+    }
+  };
+
+  const signOut = async () => {
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+    });
+    setAuth({ authenticated: false });
+  };
+
   return (
     <main className="shell">
       <section className="hero" aria-labelledby="hero-title">
@@ -45,9 +110,40 @@ export const App = () => {
             small teams can run on one box.
           </p>
           <div className="actions" aria-label="Primary actions">
-            <a href="/api/info" className="button button--primary">
-              API status
-            </a>
+            {auth.authenticated ? (
+              <div className="session-summary" aria-label="Signed in account">
+                <UserRound aria-hidden="true" />
+                <span>
+                  Signed in as <strong>{auth.handle}</strong>
+                </span>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={signOut}
+                  aria-label="Sign out"
+                >
+                  <LogOut aria-hidden="true" />
+                </button>
+              </div>
+            ) : (
+              <form className="login-form" onSubmit={signIn}>
+                <label htmlFor="handle">AT Protocol handle</label>
+                <div className="login-form__row">
+                  <input
+                    id="handle"
+                    value={handle}
+                    onChange={(event) => setHandle(event.target.value)}
+                    placeholder="alice.bsky.social"
+                    autoComplete="username"
+                    disabled={isSubmitting}
+                  />
+                  <button type="submit" className="button button--primary" disabled={isSubmitting}>
+                    {isSubmitting ? 'Opening...' : 'Sign in'}
+                  </button>
+                </div>
+                {authError ? <p className="form-error">{authError}</p> : null}
+              </form>
+            )}
             <a href="https://atproto.com" className="button button--secondary">
               AT Protocol
             </a>
@@ -65,6 +161,8 @@ export const App = () => {
             <strong>{info.media}</strong>
             <span>Version</span>
             <strong>{info.version}</strong>
+            <span>Session</span>
+            <strong>{auth.authenticated ? 'active' : 'none'}</strong>
           </div>
         </div>
       </section>

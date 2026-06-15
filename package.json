@@ -19,7 +19,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "npm run build -w @pulse/shared && npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run build -w @pulse/shared && npm run typecheck --workspaces --if-present",
+    "gen:oauth-key": "tsx scripts/gen-oauth-key.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
