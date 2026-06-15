@@ -56,6 +56,50 @@ export const apiErrorSchema = z.object({
 
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
+export const identityPrincipalSchema = z.object({
+  did: z.string().startsWith('did:'),
+  handle: z.string().min(1).optional(),
+  displayName: z.string().min(1).optional(),
+  avatarUrl: z.string().url().optional(),
+  pdsEndpoint: z.string().url().optional(),
+  profileUpdatedAt: z.string().datetime().optional(),
+});
+
+export type IdentityPrincipal = z.infer<typeof identityPrincipalSchema>;
+
+export const identityResolveResponseSchema = z.object({
+  identity: identityPrincipalSchema,
+});
+
+export type IdentityResolveResponse = z.infer<typeof identityResolveResponseSchema>;
+
+export const roomSummarySchema = z.object({
+  uri: z.string().startsWith('at://'),
+  cid: z.string().min(1),
+  rkey: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  visibility: z.enum(['public', 'inviteOnlyListing']),
+  joinMode: z.enum(['open', 'request', 'invite']),
+  language: z.string().optional(),
+  tags: z.array(z.string()),
+  creator: identityPrincipalSchema,
+  server: identityPrincipalSchema.extend({
+    baseUrl: z.string().url(),
+  }),
+  recordCreatedAt: z.string().datetime(),
+  recordUpdatedAt: z.string().datetime().optional(),
+  indexedAt: z.string().datetime(),
+});
+
+export type RoomSummary = z.infer<typeof roomSummarySchema>;
+
+export const roomSearchResponseSchema = z.object({
+  rooms: z.array(roomSummarySchema),
+});
+
+export type RoomSearchResponse = z.infer<typeof roomSearchResponseSchema>;
+
 export const appInfo: AppInfo = {
   name: 'Pulse',
   version: '0.1.0',

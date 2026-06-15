@@ -82,7 +82,27 @@ Searchable public rooms are exposed at:
 GET /api/rooms?q=audio&limit=50
 ```
 
-The local index stores only public discovery metadata from Pulse room records. Deletes remove rooms from search, and updates replace the indexed record in place.
+The local index stores only public discovery metadata from Pulse room records. Deletes remove rooms from search, and updates replace the indexed record in place. Room API responses use DID-keyed `creator` and `server` principals; handles, display names, avatars, and PDS endpoints are returned only as mutable profile fields.
+
+## Identity Cache
+
+Pulse resolves AT Protocol identity in the API runtime and caches the client-safe profile snapshot in the same SQLite database as the room index. The cache key is always the DID. Handles are treated as refreshable display metadata because they can move to another DID.
+
+The identity service:
+
+- resolves handles with `com.atproto.identity.resolveHandle`,
+- resolves PDS endpoints from DID documents,
+- fetches public profile fields with `app.bsky.actor.getProfile`,
+- refreshes stale cache entries after one hour,
+- returns a DID-only principal when DID/profile lookup fails, so room discovery does not fail closed on a remote outage.
+
+Clients can resolve a handle through:
+
+```bash
+GET /api/identity/resolve?handle=alice.bsky.social
+```
+
+This endpoint is for discovery and display. Store the returned DID for durable references, not the submitted handle.
 
 ## Deployment
 
