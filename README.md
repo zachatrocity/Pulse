@@ -61,6 +61,7 @@ Copy `.env.example` to `.env` for local overrides.
 | `PULSE_OAUTH_PRIVATE_KEY`     | production HTTPS | unset                                                                                                            | JSON private JWK for the confidential OAuth client. Generate with `npm run gen:oauth-key`. Required when `PULSE_PUBLIC_URL` is not local loopback in production. |
 | `PULSE_DATABASE_PATH`         | no               | `./data/pulse.sqlite`                                                                                            | SQLite database path for the local room index.                                                                                                                   |
 | `PULSE_ATPROTO_PDS_URL`       | no               | `https://bsky.social`                                                                                            | AT Protocol PDS used for startup backfill through `listRecords`.                                                                                                 |
+| `PULSE_SERVER_DID`            | production       | `did:web:localhost`                                                                                              | DID for the Pulse server or service account embedded in published room records. Required in production.                                                          |
 | `PULSE_INDEXER_REPOS`         | no               | empty                                                                                                            | Comma-separated DIDs to backfill on startup.                                                                                                                     |
 | `PULSE_INDEXER_JETSTREAM_URL` | no               | empty                                                                                                            | Optional Jetstream WebSocket URL for ongoing room record create/update/delete events.                                                                            |
 
@@ -82,6 +83,15 @@ Searchable public rooms are exposed at:
 
 ```bash
 GET /api/rooms?q=audio&limit=50
+```
+
+Signed-in users can publish rooms through the web app or API. Pulse writes an
+`app.pulse.room` record to the creator's AT Protocol repo and stores local
+runtime state in SQLite for owner checks, voice state, and access policy:
+
+```bash
+POST /api/rooms
+PATCH /api/rooms/:encodedRoomUri
 ```
 
 The local index stores only public discovery metadata from Pulse room records. Deletes remove rooms from search, and updates replace the indexed record in place. Room API responses use DID-keyed `creator` and `server` principals; handles, display names, avatars, and PDS endpoints are returned only as mutable profile fields.

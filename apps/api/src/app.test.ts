@@ -1,9 +1,17 @@
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { createApp } from './app.js';
+import { sessionCookieName, signSessionId } from './auth/cookies.js';
+import { FileAuthStore } from './auth/store.js';
 import { loadConfig } from './config.js';
 import type { AtprotoIdentityService } from './identity/service.js';
+import type { AtprotoRepoSession, RoomRecordPublisher } from './rooms/publisher.js';
 import { RoomIndexStore } from './rooms/store.js';
+import type { Did, PulseRoomRecord } from '@pulse/shared';
 
 const indexedRoomInput = {
   uri: 'at://did:plc:creator/app.pulse.room/room1' as const,
@@ -39,6 +47,61 @@ const identityService = {
       ['did:plc:pulseserver', { did: 'did:plc:pulseserver' }],
     ]),
 } as unknown as AtprotoIdentityService;
+
+const createSignedInAuthStore = async (did: Did = 'did:plc:creator') => {
+  const dir = await mkdtemp(join(tmpdir(), 'pulse-auth-'));
+  const store = new FileAuthStore(join(dir, 'auth-store.json'));
+  const now = new Date().toISOString();
+  await store.setWebSession('test-session', {
+    did,
+    handle: 'creator.example',
+    pdsEndpoint: 'https://pds.example.com',
+    scope: 'atproto repo:app.pulse.room',
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return {
+    store,
+    cookie: `${sessionCookieName}=${signSessionId(
+      'test-session',
+      'development-only-pulse-session-secret',
+    )}`,
+  };
+};
+
+const createFakePublisher = (): RoomRecordPublisher & {
+  created: PulseRoomRecord[];
+  updated: Array<{ repo: Did; rkey: string; record: PulseRoomRecord }>;
+} => {
+  const publisher = {
+    created: [] as PulseRoomRecord[],
+    updated: [] as Array<{ repo: Did; rkey: string; record: PulseRoomRecord }>,
+    createRoomRecord: async (_session: AtprotoRepoSession, record: PulseRoomRecord) => {
+      publisher.created.push(record);
+      return {
+        uri: 'at://did:plc:creator/app.pulse.room/createdroom' as const,
+        cid: 'bafycreated',
+        rkey: 'createdroom',
+        record,
+      };
+    },
+    updateRoomRecord: async (
+      _session: AtprotoRepoSession,
+      input: { repo: Did; rkey: string; record: PulseRoomRecord },
+    ) => {
+      publisher.updated.push(input);
+      return {
+        uri: `at://${input.repo}/app.pulse.room/${input.rkey}` as const,
+        cid: 'bafyupdated',
+        rkey: input.rkey,
+        record: input.record,
+      };
+    },
+  };
+
+  return publisher;
+};
 
 describe('api app', () => {
   it('returns health information', async () => {
@@ -141,6 +204,7 @@ describe('api app', () => {
         NODE_ENV: 'production',
         PULSE_PUBLIC_URL: 'https://pulse.example.com',
         PULSE_SESSION_SECRET: 'too-short',
+        PULSE_SERVER_DID: 'did:web:pulse.example.com',
       }),
     ).toThrow('PULSE_SESSION_SECRET must be set to at least 32 characters in production');
   });
@@ -168,6 +232,156 @@ describe('api app', () => {
           uri: 'at://did:plc:creator/app.pulse.room/room1',
         },
       ],
+    });
+  });
+
+  it('requires a signed-in session to create rooms', async () => {
+    const app = createApp(loadConfig({}));
+
+    const response = await app.request('/api/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Private Operators' }),
+    });
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: 'Sign in to create a room.',
+    });
+  });
+
+  it('publishes invite-listed rooms and stores local runtime policy state', async () => {
+    const auth = await createSignedInAuthStore();
+    const roomStore = new RoomIndexStore();
+    const publisher = createFakePublisher();
+    const app = createApp(
+      loadConfig({
+        PULSE_PUBLIC_URL: 'https://pulse.example.com',
+        PULSE_SERVER_DID: 'did:web:pulse.example.com',
+      }),
+      {
+        authStore: auth.store,
+        roomStore,
+        identityService,
+        roomRecordPublisher: publisher,
+        restoreOAuthSession: async () =>
+          ({
+            did: 'did:plc:creator',
+            fetchHandler: async () => new Response(),
+          }) as AtprotoRepoSession,
+      },
+    );
+
+    const response = await app.request('/api/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Cookie: auth.cookie },
+      body: JSON.stringify({
+        title: 'Maintainers Only',
+        description: 'Release prep',
+        visibility: 'inviteOnlyListing',
+        joinMode: 'invite',
+        tags: ['release'],
+      }),
+    });
+
+    expect(response.status).toBe(201);
+    await expect(response.json()).resolves.toMatchObject({
+      room: {
+        uri: 'at://did:plc:creator/app.pulse.room/createdroom',
+        name: 'Maintainers Only',
+        visibility: 'inviteOnlyListing',
+        joinMode: 'invite',
+        description: 'Release prep',
+        tags: ['release'],
+      },
+    });
+    expect(publisher.created[0]).toMatchObject({
+      name: 'Maintainers Only',
+      description: 'Release prep',
+      visibility: 'inviteOnlyListing',
+      joinMode: 'invite',
+      server: {
+        serviceDid: 'did:web:pulse.example.com',
+        baseUrl: 'https://pulse.example.com',
+      },
+    });
+    expect(
+      roomStore.getRoomRuntimeState('at://did:plc:creator/app.pulse.room/createdroom'),
+    ).toMatchObject({
+      ownerDid: 'did:plc:creator',
+      visibility: 'inviteOnlyListing',
+      joinMode: 'invite',
+      serverDid: 'did:web:pulse.example.com',
+    });
+  });
+
+  it('lets the room owner update public metadata and visibility policy', async () => {
+    const auth = await createSignedInAuthStore();
+    const roomStore = new RoomIndexStore();
+    roomStore.upsertRoom(indexedRoomInput);
+    const publisher = createFakePublisher();
+    const app = createApp(
+      loadConfig({
+        PULSE_PUBLIC_URL: 'https://pulse.example.com',
+        PULSE_SERVER_DID: 'did:web:pulse.example.com',
+      }),
+      {
+        authStore: auth.store,
+        roomStore,
+        identityService,
+        roomRecordPublisher: publisher,
+        restoreOAuthSession: async () =>
+          ({
+            did: 'did:plc:creator',
+            fetchHandler: async () => new Response(),
+          }) as AtprotoRepoSession,
+      },
+    );
+    const roomUri = encodeURIComponent(indexedRoomInput.uri);
+
+    const response = await app.request(`/api/rooms/${roomUri}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Cookie: auth.cookie },
+      body: JSON.stringify({
+        title: 'Release Cafe',
+        description: 'Invite-only release room',
+        visibility: 'inviteOnlyListing',
+        joinMode: 'invite',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      room: {
+        name: 'Release Cafe',
+        description: 'Invite-only release room',
+        visibility: 'inviteOnlyListing',
+        joinMode: 'invite',
+      },
+    });
+    expect(publisher.updated[0]).toMatchObject({
+      repo: 'did:plc:creator',
+      rkey: 'room1',
+      record: {
+        name: 'Release Cafe',
+        description: 'Invite-only release room',
+        visibility: 'inviteOnlyListing',
+        joinMode: 'invite',
+      },
+    });
+    expect(roomStore.getRoom(indexedRoomInput.uri)?.cid).toBe('bafyupdated');
+    expect(roomStore.getRoomRuntimeState(indexedRoomInput.uri)).toMatchObject({
+      ownerDid: 'did:plc:creator',
+      visibility: 'inviteOnlyListing',
+      joinMode: 'invite',
+    });
+
+    const policy = await app.request(`/api/rooms/${roomUri}/policy`);
+    await expect(policy.json()).resolves.toMatchObject({
+      visibility: 'inviteOnlyListing',
+      joinMode: 'invite',
+      requiresInvite: true,
+      requestToSpeak: true,
     });
   });
 

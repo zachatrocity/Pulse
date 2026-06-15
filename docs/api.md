@@ -163,6 +163,49 @@ Response:
 
 ## Rooms and Policy
 
+### `POST /api/rooms`
+
+Creates a room for the signed-in browser user. The API publishes an
+`app.pulse.room` record to the creator's AT Protocol repo and stores app-local
+runtime state for owner checks, voice state, and access policy.
+
+Request:
+
+```json
+{
+  "title": "Repair Cafe",
+  "description": "Weekly hardware debugging",
+  "visibility": "public",
+  "joinMode": "open",
+  "tags": ["hardware"]
+}
+```
+
+Response: `201`
+
+```json
+{
+  "room": {
+    "uri": "at://did:plc:creator/app.pulse.room/room1",
+    "cid": "bafyroom",
+    "rkey": "room1",
+    "name": "Repair Cafe",
+    "visibility": "public",
+    "joinMode": "open",
+    "tags": ["hardware"],
+    "creator": {
+      "did": "did:plc:creator"
+    },
+    "server": {
+      "did": "did:web:pulse.example.com",
+      "baseUrl": "https://pulse.example.com"
+    },
+    "recordCreatedAt": "2026-06-15T00:00:00.000Z",
+    "indexedAt": "2026-06-15T00:00:00.000Z"
+  }
+}
+```
+
 ### `GET /api/rooms/:roomUri`
 
 Returns one indexed room by URL-encoded AT URI.
@@ -190,6 +233,49 @@ Response:
     },
     "recordCreatedAt": "2026-06-15T00:00:00.000Z",
     "indexedAt": "2026-06-15T00:00:00.000Z"
+  }
+}
+```
+
+### `PATCH /api/rooms/:roomUri`
+
+Updates room metadata and visibility policy. The signed-in user must own the
+room record.
+
+Request:
+
+```json
+{
+  "title": "Repair Cafe Live",
+  "description": "Invite-only release prep",
+  "visibility": "inviteOnlyListing",
+  "joinMode": "invite"
+}
+```
+
+Response:
+
+```json
+{
+  "room": {
+    "uri": "at://did:plc:creator/app.pulse.room/room1",
+    "cid": "bafyupdated",
+    "rkey": "room1",
+    "name": "Repair Cafe Live",
+    "description": "Invite-only release prep",
+    "visibility": "inviteOnlyListing",
+    "joinMode": "invite",
+    "tags": [],
+    "creator": {
+      "did": "did:plc:creator"
+    },
+    "server": {
+      "did": "did:web:pulse.example.com",
+      "baseUrl": "https://pulse.example.com"
+    },
+    "recordCreatedAt": "2026-06-15T00:00:00.000Z",
+    "recordUpdatedAt": "2026-06-15T01:00:00.000Z",
+    "indexedAt": "2026-06-15T01:00:00.000Z"
   }
 }
 ```
